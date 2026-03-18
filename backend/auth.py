@@ -1,7 +1,6 @@
 import logging
 from typing import Annotated
 
-import certifi
 import jwt
 from fastapi import Depends, Header, HTTPException, Request
 from jwt import PyJWKClient
