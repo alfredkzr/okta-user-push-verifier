@@ -1,4 +1,17 @@
 services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - backend/.env
+    environment:
+      - DYNAMODB_ENDPOINT_URL=http://dynamodb-local:8000
+    depends_on:
+      dynamodb-local:
+        condition: service_started
+    restart: unless-stopped
+
   dynamodb-local:
     image: amazon/dynamodb-local:latest
     ports:

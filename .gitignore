@@ -22,13 +22,6 @@ dist/
 *.pfx
 *.crt
 
-# Terraform
-.terraform/
-*.tfstate
-*.tfstate.*
-*.tfvars
-!*.tfvars.example
-
 # IDE
 .vscode/
 .idea/

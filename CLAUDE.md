@@ -17,7 +17,7 @@ Open-source identity verification tool:
 - **Backend**: FastAPI (Python 3.13+, Uvicorn)
 - **Database**: DynamoDB (PAY_PER_REQUEST billing)
 - **Auth**: Okta OIDC (PKCE) for SPA, `private_key_jwt` for service API calls
-- **Infra**: AWS Lambda (Function URL + Lambda Web Adapter) + ECR + Secrets Manager
+- **Infra**: Docker Compose
 - **CI**: GitHub Actions
 
 ## Repository Structure
@@ -51,19 +51,9 @@ Open-source identity verification tool:
 │   │       └── ThemeContext.tsx  # Dark/light theme
 │   ├── package.json
 │   └── vite.config.ts      # Proxy /api to backend in dev
-├── terraform/
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   ├── ecr.tf              # Container registry
-│   ├── lambda.tf            # Lambda function + Function URL
-│   ├── dynamodb.tf          # Tables (PAY_PER_REQUEST)
-│   ├── secrets.tf           # Secrets Manager
-│   └── iam.tf              # Lambda execution role
-├── Dockerfile               # Multi-stage: Node build → Python runtime (server + lambda targets)
-├── docker-compose.yml       # DynamoDB Local for dev
+├── Dockerfile               # Multi-stage: Node build → Python runtime
+├── docker-compose.yml       # App + DynamoDB Local
 ├── start.sh                 # One-command local dev startup
-├── deploy.sh                # Build, push to ECR, deploy Lambda
 ├── .github/workflows/ci.yml
 ├── README.md
 ├── CONTRIBUTING.md
@@ -77,15 +67,12 @@ Open-source identity verification tool:
 ```
 
 - Frontend: http://localhost:5173
-- Backend: http://localhost:8000
+- Backend: http://localhost:8001
 - DynamoDB Local: http://localhost:8002
 
-## Docker Targets
+## Docker
 
-The Dockerfile has two build targets:
-
-- `docker build --target server .` — Traditional Docker host (local, ECS, App Runner)
-- `docker build --target lambda .` — AWS Lambda via Lambda Web Adapter (production)
+The Dockerfile builds a production image.
 
 ## Key Patterns
 
@@ -99,10 +86,6 @@ The Dockerfile has two build targets:
 
 ## Deployment
 
-Uses AWS Lambda with Function URL (~$0.50/month).
-
 ```bash
-cd terraform && terraform apply
-# Set secrets in Secrets Manager
-./deploy.sh
+docker compose up
 ```

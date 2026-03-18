@@ -18,19 +18,16 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
 if [ ! -f backend/.env ]; then
-  if [ -f .env.example ]; then
-    cp .env.example backend/.env
-    info "Copied .env.example to backend/.env — edit with your Okta config"
-  elif [ -f backend/.env.example ]; then
+  if [ -f backend/.env.example ]; then
     cp backend/.env.example backend/.env
-    info "Copied backend/.env.example to backend/.env"
+    info "Copied backend/.env.example to backend/.env — edit with your Okta config"
   else
-    fail "No .env.example found"
+    fail "No backend/.env.example found"
   fi
 fi
 
 info "Starting DynamoDB Local..."
-docker compose up -d
+docker compose up -d dynamodb-local
 
 if [ ! -d backend/venv ]; then
   info "Creating Python virtual environment..."
@@ -55,7 +52,7 @@ cleanup() {
   info "Shutting down..."
   [ -n "$BACKEND_PID" ] && kill "$BACKEND_PID" 2>/dev/null || true
   [ -n "$FRONTEND_PID" ] && kill "$FRONTEND_PID" 2>/dev/null || true
-  docker compose down
+  docker compose down dynamodb-local
   ok "Stopped"
 }
 

@@ -15,16 +15,16 @@ Identity verification tool powered by Okta Verify Push notifications. An operato
 - **Audit Logging** — Track all verification attempts and admin actions
 - **Rate Limiting** — 5 verifications per minute per IP via slowapi
 - **Dark Mode** — System-aware theme with manual toggle
-- **Near-Free Deployment** — AWS Lambda + DynamoDB (~$0.50/month)
+- **Docker Compose** — Single command to run the full stack
 
 ## Architecture
 
 ```
 ┌──────────────┐     ┌──────────────────┐     ┌─────────────┐
 │              │     │                  │     │             │
-│   React SPA  │────▶│  FastAPI + SSE   │────▶│  Okta API   │
+│   React SPA  │────>│  FastAPI + SSE   │────>│  Okta API   │
 │   (Vite)     │     │  (Uvicorn)       │     │             │
-│              │◀────│                  │◀────│             │
+│              │<────│                  │<────│             │
 └──────────────┘     └────────┬─────────┘     └─────────────┘
                               │
                      ┌────────▼─────────┐
@@ -45,8 +45,7 @@ Identity verification tool powered by Okta Verify Push notifications. An operato
 | Backend        | Python 3.13, FastAPI, httpx, PyJWT, slowapi   |
 | Database       | Amazon DynamoDB (PAY_PER_REQUEST)              |
 | Auth           | Okta OIDC (PKCE) + Okta API (private_key_jwt) |
-| Infrastructure | AWS Lambda (Function URL), ECR, Secrets Manager |
-| IaC            | Terraform                                      |
+| Infrastructure | Docker Compose                                |
 | CI             | GitHub Actions                                 |
 
 ## Quick Start
@@ -63,7 +62,7 @@ Identity verification tool powered by Okta Verify Push notifications. An operato
 ```bash
 git clone <repo-url>
 cd push-verifier
-cp .env.example backend/.env
+cp backend/.env.example backend/.env
 # Edit backend/.env with your Okta configuration
 ```
 
@@ -80,6 +79,18 @@ This starts DynamoDB Local, the backend (port 8001), and frontend (port 5173).
 - Backend: http://localhost:8001
 - DynamoDB Local: http://localhost:8002
 
+## Docker
+
+To run the full stack with Docker Compose:
+
+```bash
+cp backend/.env.example backend/.env
+# Edit backend/.env with your Okta configuration
+docker compose up
+```
+
+This builds the app container and starts it alongside DynamoDB Local. The `DYNAMODB_ENDPOINT_URL` is configured automatically in docker-compose.yml.
+
 ## Configuration
 
 | Variable              | Description                              | Default              |
@@ -93,9 +104,8 @@ This starts DynamoDB Local, the backend (port 8001), and frontend (port 5173).
 | `OIDC_CLIENT_ID`      | SPA OIDC client ID                       | *required*           |
 | `ADMIN_GROUP`         | Okta group name for admin role           | `push-verifier-admin`|
 | `USER_GROUP`          | Okta group name for user role            | `push-verifier-user` |
-| `DYNAMODB_ENDPOINT_URL`| DynamoDB endpoint (local dev)           | *(none — uses AWS)*  |
+| `DYNAMODB_ENDPOINT_URL`| DynamoDB endpoint (set automatically in docker-compose) | *(none)* |
 | `DYNAMODB_TABLE_PREFIX`| Table name prefix                       | `push-verifier`      |
-| `AWS_REGION`          | AWS region                               | `us-east-1`          |
 
 ## Repository Structure
 
@@ -133,21 +143,9 @@ This starts DynamoDB Local, the backend (port 8001), and frontend (port 5173).
 │   │       └── ThemeContext.tsx  # Dark/light theme
 │   ├── package.json
 │   └── vite.config.ts      # Proxy /api to backend in dev
-├── terraform/
-│   ├── main.tf              # Provider configuration
-│   ├── variables.tf         # Input variables
-│   ├── outputs.tf           # App URL, ECR URL, secret ARN
-│   ├── ecr.tf               # Container registry (keeps last 5 images)
-│   ├── lambda.tf            # Lambda function + Function URL (response streaming)
-│   ├── dynamodb.tf          # Tables (PAY_PER_REQUEST)
-│   ├── secrets.tf           # Secrets Manager
-│   ├── iam.tf               # Lambda execution role
-│   └── terraform.tfvars.example
-├── .env.example             # Environment variable template
-├── Dockerfile               # Multi-stage: Node build → Python runtime (server + lambda targets)
-├── docker-compose.yml       # DynamoDB Local for dev
+├── Dockerfile               # Multi-stage build
+├── docker-compose.yml       # App + DynamoDB Local
 ├── start.sh                 # One-command local dev startup
-├── deploy.sh                # Build, push to ECR, deploy Lambda
 ├── .github/workflows/ci.yml # Lint + build checks
 ├── CONTRIBUTING.md
 └── LICENSE (MIT)
@@ -161,42 +159,6 @@ You need two Okta applications:
 2. **Service Application** (for backend API calls): OAuth 2.0 service app with `private_key_jwt` client authentication and `okta.users.manage` scope
 
 Create two Okta groups (`push-verifier-admin`, `push-verifier-user`) and assign users accordingly. Add a "groups" claim to your authorization server so group membership is included in tokens.
-
-## Deployment
-
-### Infrastructure
-
-```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-terraform init
-terraform plan
-terraform apply
-```
-
-### Set secrets
-
-```bash
-aws secretsmanager put-secret-value \
-  --secret-id push-verifier/production/config \
-  --secret-string '{"OKTA_DOMAIN":"...","OKTA_CLIENT_ID":"...","OKTA_PRIVATE_KEY_B64":"...","OKTA_KEY_ID":"...","OIDC_ISSUER":"...","OIDC_CLIENT_ID":"..."}'
-```
-
-### Deploy
-
-```bash
-chmod +x deploy.sh
-./deploy.sh
-```
-
-Estimated monthly cost: **~$0.50** (Lambda free tier + DynamoDB on-demand + Secrets Manager). The Lambda Web Adapter runs the same Docker container serverlessly with response streaming for SSE support. Cold starts are ~2-3 seconds after idle.
-
-### Docker Targets
-
-The Dockerfile has two build targets:
-
-- `docker build --target server .` — Traditional Docker host (local, ECS, App Runner). Includes healthcheck and unprivileged user.
-- `docker build --target lambda .` — AWS Lambda via Lambda Web Adapter (production). Uses response streaming invoke mode.
 
 ## Contributing
 
