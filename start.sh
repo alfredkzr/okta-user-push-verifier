@@ -10,7 +10,7 @@ info() { echo -e "${CYAN}[info]${NC} $1"; }
 ok() { echo -e "${GREEN}[ok]${NC} $1"; }
 fail() { echo -e "${RED}[error]${NC} $1"; exit 1; }
 
-for cmd in python3 node docker; do
+for cmd in python3 node; do
   command -v "$cmd" >/dev/null 2>&1 || fail "$cmd is required but not installed"
 done
 
@@ -26,9 +26,6 @@ if [ ! -f backend/.env ]; then
   fi
 fi
 
-info "Starting DynamoDB Local..."
-docker compose up -d dynamodb-local
-
 if [ ! -d backend/venv ]; then
   info "Creating Python virtual environment..."
   python3 -m venv backend/venv
@@ -42,9 +39,6 @@ if [ ! -d frontend/node_modules ]; then
   (cd frontend && npm install)
 fi
 
-export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-local}"
-export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-local}"
-
 BACKEND_PID=""
 FRONTEND_PID=""
 
@@ -52,7 +46,6 @@ cleanup() {
   info "Shutting down..."
   [ -n "$BACKEND_PID" ] && kill "$BACKEND_PID" 2>/dev/null || true
   [ -n "$FRONTEND_PID" ] && kill "$FRONTEND_PID" 2>/dev/null || true
-  docker compose down dynamodb-local
   ok "Stopped"
 }
 
@@ -70,7 +63,6 @@ ok "Development servers running"
 echo ""
 echo "  Frontend:  http://localhost:5173"
 echo "  Backend:   http://localhost:8001"
-echo "  DynamoDB:  http://localhost:8002"
 echo ""
 echo "Press Ctrl+C to stop all services"
 echo ""

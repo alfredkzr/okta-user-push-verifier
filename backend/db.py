@@ -1,23 +1,21 @@
 import logging
+import sqlite3
 from datetime import datetime, timezone
-
-import boto3
-from botocore.exceptions import ClientError
+from pathlib import Path
 
 from config import settings
 
 logger = logging.getLogger(__name__)
 
-
-def _get_dynamodb():
-    kwargs = {"region_name": settings.aws_region}
-    if settings.dynamodb_endpoint_url:
-        kwargs["endpoint_url"] = settings.dynamodb_endpoint_url
-    return boto3.resource("dynamodb", **kwargs)
+_DB_PATH = Path(settings.database_path)
 
 
-def _table_name(suffix: str) -> str:
-    return f"{settings.dynamodb_table_prefix}-{suffix}"
+def _get_connection() -> sqlite3.Connection:
+    conn = sqlite3.connect(str(_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
 
 
 def _now_iso() -> str:
@@ -25,154 +23,142 @@ def _now_iso() -> str:
 
 
 def ensure_tables_exist():
-    db = _get_dynamodb()
-    existing = {t.name for t in db.tables.all()}
+    _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = _get_connection()
+    try:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS protected_users (
+                email TEXT PRIMARY KEY,
+                added_by TEXT NOT NULL,
+                added_at TEXT NOT NULL
+            );
 
-    tables = [
-        {
-            "name": _table_name("protected-users"),
-            "keys": [{"AttributeName": "email", "KeyType": "HASH"}],
-            "attrs": [{"AttributeName": "email", "AttributeType": "S"}],
-        },
-        {
-            "name": _table_name("audit-log"),
-            "keys": [
-                {"AttributeName": "pk", "KeyType": "HASH"},
-                {"AttributeName": "timestamp", "KeyType": "RANGE"},
-            ],
-            "attrs": [
-                {"AttributeName": "pk", "AttributeType": "S"},
-                {"AttributeName": "timestamp", "AttributeType": "S"},
-            ],
-        },
-        {
-            "name": _table_name("verify-log"),
-            "keys": [
-                {"AttributeName": "pk", "KeyType": "HASH"},
-                {"AttributeName": "timestamp", "KeyType": "RANGE"},
-            ],
-            "attrs": [
-                {"AttributeName": "pk", "AttributeType": "S"},
-                {"AttributeName": "timestamp", "AttributeType": "S"},
-            ],
-        },
-    ]
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                operator TEXT NOT NULL,
+                target TEXT NOT NULL,
+                action TEXT NOT NULL,
+                details TEXT
+            );
 
-    for table_def in tables:
-        if table_def["name"] not in existing:
-            try:
-                db.create_table(
-                    TableName=table_def["name"],
-                    KeySchema=table_def["keys"],
-                    AttributeDefinitions=table_def["attrs"],
-                    BillingMode="PAY_PER_REQUEST",
-                )
-                logger.info("Created table %s", table_def["name"])
-            except ClientError as e:
-                if e.response["Error"]["Code"] != "ResourceInUseException":
-                    raise
+            CREATE TABLE IF NOT EXISTS verify_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                operator TEXT NOT NULL,
+                target TEXT NOT NULL,
+                status TEXT NOT NULL,
+                devices_challenged INTEGER NOT NULL DEFAULT 0,
+                details TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_verify_log_timestamp ON verify_log(timestamp DESC);
+        """)
+        conn.commit()
+        logger.info("Database tables ready at %s", _DB_PATH)
+    finally:
+        conn.close()
 
 
 def get_protected_users() -> list[dict]:
-    db = _get_dynamodb()
-    table = db.Table(_table_name("protected-users"))
-    response = table.scan()
-    return response.get("Items", [])
+    conn = _get_connection()
+    try:
+        rows = conn.execute("SELECT email, added_by, added_at FROM protected_users").fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
 
 
 def is_protected_user(email: str) -> bool:
-    db = _get_dynamodb()
-    table = db.Table(_table_name("protected-users"))
-    response = table.get_item(Key={"email": email.lower()})
-    return "Item" in response
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM protected_users WHERE email = ?", (email.lower(),)
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
 
 
 def add_protected_user(email: str, operator: str) -> bool:
-    db = _get_dynamodb()
-    table = db.Table(_table_name("protected-users"))
-
+    conn = _get_connection()
     try:
-        table.put_item(
-            Item={"email": email.lower(), "added_by": operator, "added_at": _now_iso()},
-            ConditionExpression="attribute_not_exists(email)",
+        cursor = conn.execute(
+            "INSERT OR IGNORE INTO protected_users (email, added_by, added_at) VALUES (?, ?, ?)",
+            (email.lower(), operator, _now_iso()),
         )
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+        conn.commit()
+        if cursor.rowcount == 0:
             return False
-        raise
+    finally:
+        conn.close()
 
     _write_audit_log(operator, email, "ADD_PROTECTED", f"Added {email} to protected list")
     return True
 
 
 def remove_protected_user(email: str, operator: str) -> bool:
-    db = _get_dynamodb()
-    table = db.Table(_table_name("protected-users"))
-
+    conn = _get_connection()
     try:
-        table.delete_item(
-            Key={"email": email.lower()},
-            ConditionExpression="attribute_exists(email)",
+        cursor = conn.execute(
+            "DELETE FROM protected_users WHERE email = ?", (email.lower(),)
         )
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+        conn.commit()
+        if cursor.rowcount == 0:
             return False
-        raise
+    finally:
+        conn.close()
 
     _write_audit_log(operator, email, "REMOVE_PROTECTED", f"Removed {email} from protected list")
     return True
 
 
 def _write_audit_log(operator: str, target: str, action: str, details: str | None = None):
-    db = _get_dynamodb()
-    table = db.Table(_table_name("audit-log"))
-    item = {
-        "pk": "AUDIT",
-        "timestamp": _now_iso(),
-        "operator": operator,
-        "target": target,
-        "action": action,
-    }
-    if details:
-        item["details"] = details
-    table.put_item(Item=item)
+    conn = _get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO audit_log (timestamp, operator, target, action, details) VALUES (?, ?, ?, ?, ?)",
+            (_now_iso(), operator, target, action, details),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def write_verification_log(
     operator: str, target: str, status: str, devices_challenged: int, details: str | None = None
 ):
-    db = _get_dynamodb()
-    table = db.Table(_table_name("verify-log"))
-    item = {
-        "pk": "VERIFY",
-        "timestamp": _now_iso(),
-        "operator": operator,
-        "target": target,
-        "status": status,
-        "devices_challenged": devices_challenged,
-    }
-    if details:
-        item["details"] = details
-    table.put_item(Item=item)
+    conn = _get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO verify_log (timestamp, operator, target, status, devices_challenged, details) VALUES (?, ?, ?, ?, ?, ?)",
+            (_now_iso(), operator, target, status, devices_challenged, details),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def get_verification_log(limit: int = 20) -> list[dict]:
-    db = _get_dynamodb()
-    table = db.Table(_table_name("verify-log"))
-    response = table.query(
-        KeyConditionExpression=boto3.dynamodb.conditions.Key("pk").eq("VERIFY"),
-        ScanIndexForward=False,
-        Limit=limit,
-    )
-    return response.get("Items", [])
+    conn = _get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT timestamp, operator, target, status, devices_challenged, details FROM verify_log ORDER BY timestamp DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
 
 
 def get_audit_log(limit: int = 50) -> list[dict]:
-    db = _get_dynamodb()
-    table = db.Table(_table_name("audit-log"))
-    response = table.query(
-        KeyConditionExpression=boto3.dynamodb.conditions.Key("pk").eq("AUDIT"),
-        ScanIndexForward=False,
-        Limit=limit,
-    )
-    return response.get("Items", [])
+    conn = _get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT timestamp, operator, target, action, details FROM audit_log ORDER BY timestamp DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()

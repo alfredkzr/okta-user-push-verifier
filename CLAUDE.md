@@ -15,10 +15,9 @@ Open-source identity verification tool:
 
 - **Frontend**: React 19 SPA (Vite + Tailwind CSS v4)
 - **Backend**: FastAPI (Python 3.13+, Uvicorn)
-- **Database**: DynamoDB (PAY_PER_REQUEST billing)
+- **Database**: SQLite
 - **Auth**: Okta OIDC (PKCE) for SPA, `private_key_jwt` for service API calls
-- **Infra**: Docker Compose
-- **CI**: GitHub Actions
+- **Infra**: Docker
 
 ## Repository Structure
 
@@ -28,7 +27,7 @@ Open-source identity verification tool:
 │   ├── main.py              # App factory, lifespan, middleware, SPA serving
 │   ├── config.py            # Pydantic BaseSettings
 │   ├── auth.py              # JWT validation, RBAC (admin/user roles)
-│   ├── db.py                # DynamoDB operations
+│   ├── db.py                # SQLite database operations
 │   ├── models.py            # Pydantic request/response models
 │   ├── requirements.txt
 │   ├── routers/
@@ -52,9 +51,8 @@ Open-source identity verification tool:
 │   ├── package.json
 │   └── vite.config.ts      # Proxy /api to backend in dev
 ├── Dockerfile               # Multi-stage: Node build → Python runtime
-├── docker-compose.yml       # App + DynamoDB Local
+├── docker-compose.yml       # Production deployment
 ├── start.sh                 # One-command local dev startup
-├── .github/workflows/ci.yml
 ├── README.md
 ├── CONTRIBUTING.md
 └── LICENSE (MIT)
@@ -68,7 +66,7 @@ Open-source identity verification tool:
 
 - Frontend: http://localhost:5173
 - Backend: http://localhost:8001
-- DynamoDB Local: http://localhost:8002
+
 
 ## Docker
 
@@ -79,7 +77,7 @@ The Dockerfile builds a production image.
 - Backend routes split into `routers/` — add new endpoints there
 - Auth rules in `auth.py` — `require_authenticated` and `require_admin` are FastAPI dependencies
 - Okta API calls in `services/okta.py` — async generator yields SSE events
-- DynamoDB operations in `db.py` — tables auto-created on startup
+- SQLite operations in `db.py` — database and tables auto-created on startup
 - Frontend uses `useAuth()` hook for tokens and role
 - API proxy in `vite.config.ts` for dev
 - Production: frontend build copied to `backend/static/`, served by FastAPI SPA catch-all

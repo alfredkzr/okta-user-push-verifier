@@ -18,9 +18,7 @@ class Settings(BaseSettings):
     admin_group: str = "push-verifier-admin"
     user_group: str = "push-verifier-user"
 
-    dynamodb_endpoint_url: str | None = None
-    dynamodb_table_prefix: str = "push-verifier"
-    aws_region: str = "us-east-1"
+    database_path: str = "data/push-verifier.db"
 
 
 settings = Settings()
