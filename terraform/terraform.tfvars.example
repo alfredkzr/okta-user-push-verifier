@@ -1,0 +1,3 @@
+aws_region  = "us-east-1"
+app_name    = "push-verifier"
+environment = "production"
