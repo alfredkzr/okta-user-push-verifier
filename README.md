@@ -91,6 +91,7 @@ You need **two** Okta applications:
 - Client authentication: `private_key_jwt`
 - Scope: `okta.users.manage`
 - Generate a key pair and download the private key
+- Assign an **admin role** to the app (Applications > your service app > Admin roles): grant a role with user read/management permissions (e.g. **Super Admin**, **Org Admin**, or a custom role scoped to user management)
 
 ### Groups
 
