@@ -63,7 +63,17 @@ def _extract_groups(
 
     if id_token:
         try:
-            id_claims = _decode_token(id_token, verify_aud=False)
+            # Skip audience AND expiry validation — we only need the groups claim,
+            # and the ID token may not be refreshed as often as the access token.
+            client = _get_jwk_client()
+            signing_key = client.get_signing_key_from_jwt(id_token)
+            id_claims = jwt.decode(
+                id_token,
+                signing_key.key,
+                algorithms=["RS256"],
+                options={"verify_aud": False},
+                leeway=300,  # Allow up to 5 minutes of clock skew / staleness
+            )
             groups = id_claims.get("groups", [])
             logger.info("Groups from ID token: %s", groups)
             return groups

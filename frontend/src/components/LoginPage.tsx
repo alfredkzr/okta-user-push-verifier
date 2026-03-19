@@ -78,13 +78,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="relative z-10 px-12 pb-8 xl:px-16">
-          <p className="text-xs text-primary-300/50">
-            &copy; {new Date().getFullYear()} Push Verifier &middot; Open
-            Source &middot; MIT License
-          </p>
-        </div>
+
       </div>
 
       {/* Right panel — login form */}

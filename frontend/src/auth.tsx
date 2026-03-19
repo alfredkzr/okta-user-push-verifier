@@ -46,9 +46,12 @@ export function AuthProvider({ children, oktaAuth, initialAuth }: AuthProviderPr
           const data = await res.json();
           setUserEmail(data.email);
           setUserRole(data.role);
-        } else if (res.status === 403) {
-          console.warn("User authenticated but not authorized (no matching Okta group). Check backend logs.");
-          setUserRole("none");
+          if (data.role === "none") {
+            console.warn("User authenticated but not authorized (no matching Okta group). Check backend logs.");
+          }
+        } else if (res.status === 401) {
+          // Token invalid/expired — force re-login
+          setIsAuthenticated(false);
         }
       } catch (err) {
         console.error("Profile fetch failed:", err);
