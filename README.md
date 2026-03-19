@@ -5,6 +5,8 @@
 [![Node 22+](https://img.shields.io/badge/Node-22+-339933.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6.svg)](https://typescriptlang.org)
 
+> **Disclaimer:** This is an independent, community-built project. It is not developed, endorsed, or supported by Okta, Inc. "Okta" and "Okta Verify" are trademarks of Okta, Inc.
+
 An open-source identity verification tool that sends Okta Verify Push challenges to a user's enrolled devices and streams the result back to the browser in real time.
 
 An operator types in a username, the backend fans out push notifications to every active device, polls for a response (up to 30 seconds), and the frontend shows live progress via Server-Sent Events.
