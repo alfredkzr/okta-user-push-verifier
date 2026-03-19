@@ -9,6 +9,10 @@ An open-source identity verification tool that sends Okta Verify Push challenges
 
 An operator types in a username, the backend fans out push notifications to every active device, polls for a response (up to 30 seconds), and the frontend shows live progress via Server-Sent Events.
 
+![Login](docs/screenshot-login.png)
+
+![Dashboard](docs/screenshot-dashboard.png)
+
 ## Features
 
 - **Real-time push verification** with live SSE progress (locating, pushing, polling, result)
