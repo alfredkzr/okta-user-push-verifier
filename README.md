@@ -99,10 +99,8 @@ You need **two** Okta applications:
 - Generate a key pair and download the private key
 - Assign an **admin role** to the app with least privilege (Applications > your service app > Admin roles):
   1. Go to **Security > Administrators > Roles > Create new role**
-  2. Add these permissions:
-     - **View users and their details**
-     - **Edit users' authenticator operations**
-     - **Manage users**
+  2. Add this permission:
+     - **Manage users** (includes view users and authenticator operations)
   3. Save the role, then assign it to your service app under **Applications > your service app > Admin roles**
   4. Scope the role to a resource set containing the users you want to verify (or all users)
 
