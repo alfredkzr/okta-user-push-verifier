@@ -97,7 +97,14 @@ You need **two** Okta applications:
 - Client authentication: `private_key_jwt`
 - Scope: `okta.users.manage`
 - Generate a key pair and download the private key
-- Assign an **admin role** to the app (Applications > your service app > Admin roles): grant a role with user read/management permissions (e.g. **Super Admin**, **Org Admin**, or a custom role scoped to user management)
+- Assign an **admin role** to the app with least privilege (Applications > your service app > Admin roles):
+  1. Go to **Security > Administrators > Roles > Create new role**
+  2. Add these permissions:
+     - **View users and their details**
+     - **Edit users' authenticator operations**
+     - **Manage users**
+  3. Save the role, then assign it to your service app under **Applications > your service app > Admin roles**
+  4. Scope the role to a resource set containing the users you want to verify (or all users)
 
 ### Groups
 
